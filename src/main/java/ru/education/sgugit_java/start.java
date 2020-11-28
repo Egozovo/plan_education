@@ -13,6 +13,7 @@ public class start {
         }else {
             inputFile = args[0];
             db.workDB(inputFile);
+            System.out.println("План обучения обновлен");
         }
     }
 }
