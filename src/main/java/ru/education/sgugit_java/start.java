@@ -1,19 +1,28 @@
 package ru.education.sgugit_java;
 
+import java.util.Arrays;
+
 public class start {
+
     public static void main(String[] args) throws Exception {
 
         String inputFile;
+        String argP = "-p";
+        String argG = "-g";
 
         ConnectDB db = new ConnectDB();
-        db.connectDBPostgres();
 
         if (args.length==0){
             System.out.println("Нет аргументов...");
-        }else {
-            inputFile = args[0];
+            System.exit(1);
+        }else if (args[0].equals(argP)){
+            inputFile = args[1];
             db.workDB(inputFile);
             System.out.println("План обучения обновлен");
+        }else if (args[0].equals(argG)) {
+            inputFile = args[1];
+            db.grafik_ed(inputFile);
+            System.out.println("График обучения обновлен");
         }
     }
 }

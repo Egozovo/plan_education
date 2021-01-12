@@ -1,15 +1,20 @@
 package ru.education.sgugit_java;
 
+import org.postgresql.copy.CopyManager;
+import org.postgresql.core.BaseConnection;
+
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.sql.*;
 
 public class ConnectDB
 {
-
     final String url = "jdbc:postgresql://localhost:5432/postgres";
     final String user = "postgres";
     final String password = "postgres";
-   // final String excelFile = "'D:\\java-project\\plan_education\\data\\23_11_20_Plany.csv'";
-    Connection con;
+     Connection con;
     Statement statement;
 
     public ConnectDB(){
@@ -24,9 +29,10 @@ public class ConnectDB
 }
 
 
-    //подключение к БД
-    public void connectDBPostgres() throws Exception
-    {
+
+    //Работа с БД
+    public void workDB (String fileExcel) throws SQLException {
+
         DatabaseMetaData dbm = con.getMetaData();
         ResultSet tables = dbm.getTables(null,null, "temp_plan_ed", null);   //если таблица есть, то происходит удаление и создание новой
         if(tables.next()){
@@ -61,15 +67,12 @@ public class ConnectDB
                 e.printStackTrace();
             }
         }
-    }
-
-    //Работа с БД
-    public void workDB (String fileExcel) throws SQLException {
 
         try{
             //загружаем данные CSV в таблицу
             System.out.println("Копирование данных в таблицу");
-            statement.executeUpdate("COPY temp_plan_ed FROM " + "'" + fileExcel + "'" + "WITH CSV HEADER DELIMITER ';'");
+            CopyManager cp = new CopyManager((BaseConnection) con);
+            cp.copyIn("COPY temp_plan_ed FROM STDIN WITH CSV HEADER DELIMITER ';';", new BufferedReader(new FileReader(fileExcel)));
 
         //удаляем лишние колонки
 
@@ -90,13 +93,13 @@ public class ConnectDB
 //обновляем семестры
             System.out.println("Обновление семестра");
             statement.executeUpdate("UPDATE temp_plan_ed SET sem_number=1 WHERE sem_number IS NULL AND course=1;" +
-                    "UPDATE temp_plan_ed SET sem_number=3 WHERE sem_number IS NULL AND course=2;" +
-                    "UPDATE temp_plan_ed SET sem_number=5 WHERE sem_number IS NULL AND course=3;" +
-                    "UPDATE temp_plan_ed SET sem_number=7 WHERE sem_number IS NULL AND course=4;" +
-                    "UPDATE temp_plan_ed SET sem_number=9 WHERE sem_number IS NULL AND course=5;" +
-                    "UPDATE temp_plan_ed SET sem_number=11 WHERE sem_number IS NULL AND course=6;" +
-                    "UPDATE temp_plan_ed SET sem_number=13 WHERE sem_number IS NULL AND course=7;" +
-                    "UPDATE temp_plan_ed SET sem_number=15 WHERE sem_number IS NULL AND course=8;");
+                    "UPDATE temp_plan_ed SET sem_number=2 WHERE sem_number IS NULL AND course=2;" +
+                    "UPDATE temp_plan_ed SET sem_number=3 WHERE sem_number IS NULL AND course=3;" +
+                    "UPDATE temp_plan_ed SET sem_number=4 WHERE sem_number IS NULL AND course=4;" +
+                    "UPDATE temp_plan_ed SET sem_number=5 WHERE sem_number IS NULL AND course=5;" +
+                    "UPDATE temp_plan_ed SET sem_number=6 WHERE sem_number IS NULL AND course=6;" +
+                    "UPDATE temp_plan_ed SET sem_number=7 WHERE sem_number IS NULL AND course=7;" +
+                    "UPDATE temp_plan_ed SET sem_number=8 WHERE sem_number IS NULL AND course=8;");
 
         //ищменяем тип колонки
 
@@ -159,8 +162,8 @@ public class ConnectDB
 
         //в отдульную таблицу копируем прошлый семестр из нынешнего плана обучения
 
-            statement.execute("SELECT * INTO plan_ed_old_sem FROM plan_ed WHERE sem_number = 2 AND sem_number = 4 AND " +
-                    "sem_number = 6 AND sem_number = 8 AND sem_number = 10 AND sem_number = 12 AND sem_number = 14 AND sem_number = 16;" +
+            statement.execute("SELECT * INTO plan_ed_old_sem FROM plan_ed WHERE sem_number = 1 AND sem_number = 3 AND " +
+                    "sem_number = 5 AND sem_number = 7 AND sem_number = 9 AND sem_number = 11 AND sem_number = 13 AND sem_number = 15;" +
                     "DELETE FROM plan_ed;");
 
 
@@ -187,9 +190,66 @@ public class ConnectDB
                     "DROP TABLE plan3;" +
                     "DROP TABLE plan_ed_old_sem;" +
                     "DROP TABLE plan_prepod_null;");
-        }catch(SQLException e){
+        }catch(SQLException | IOException e){
             e.printStackTrace();
-        }finally {
+        } finally {
+            statement.close();
+            con.close();
+        }
+    }
+
+//    Метод обнолвения графика обучения
+//    для использования необходимо указать в фргументе командной строки флаг -g
+
+    public void grafik_ed(String fileGrafik) throws SQLException {
+
+        // Создаем временную таблицу графика обучения и заливаем данные
+
+        try {
+            statement.execute("CREATE TABLE IF NOT EXISTS temp_grafik_ed" +
+                    "(profile INT, form VARCHAR, course INT, sem INT, values_grfaik VARCHAR, date_start VARCHAR, date_end VARCHAR);");
+
+            CopyManager cp = new CopyManager((BaseConnection) con);
+            cp.copyIn("COPY temp_grafik_ed FROM STDIN WITH CSV HEADER DELIMITER ';';", new BufferedReader(new FileReader(fileGrafik)));
+
+            //statement.execute("COPY temp_grafik_ed FROM " + "'" + fileGrafik + "'" + " WITH CSV HEADER DELIMITER ';';");
+
+            System.out.println("Удаление лишних полей");
+            statement.execute("ALTER TABLE temp_grafik_ed DROP COLUMN values_grfaik;");
+
+
+            // Приведение формы обучения в кодовый вид
+            statement.execute("UPDATE temp_grafik_ed SET form='1' WHERE form='Заочная';" +
+                    "UPDATE temp_grafik_ed SET form='2' WHERE form='Заочная сокращенная';" +
+                    "UPDATE temp_grafik_ed SET form='3' WHERE form='Заочная ускоренная';" +
+                    "UPDATE temp_grafik_ed SET form='4' WHERE form='Очная';" +
+                    "UPDATE temp_grafik_ed SET form='5' WHERE form='Очно-заочная';" +
+                    "UPDATE temp_grafik_ed SET form='6' WHERE form='Очно-заочная ускоренная';");
+
+            //Изменение типа данных колонки Формы обучения
+            statement.execute("ALTER TABLE temp_grafik_ed ALTER COLUMN form TYPE INT USING form::integer;");
+
+            statement.execute("UPDATE temp_grafik_ed SET sem=1 WHERE course=1 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=2 WHERE course=2 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=3 WHERE course=3 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=4 WHERE course=4 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=5 WHERE course=5 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=6 WHERE course=6 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=7 WHERE course=7 AND sem IS NULL;" +
+                    "UPDATE temp_grafik_ed SET sem=8 WHERE course=8 AND sem IS NULL;");
+
+            //Вставка данных в дефолтную таблицу графика обучения
+            statement.execute("INSERT INTO grafik_ed(id_form, course, sem_number, date_start, date_end, id_profile) " +
+                    "SELECT form, course, sem, date_start, date_end, profile FROM temp_grafik_ed;");
+
+            statement.execute("DROP TABLE IF EXISTS temp_grafik_ed;");
+
+            statement.execute("DELETE FROM grafik_ed a USING grafik_ed b " +
+                    "WHERE a.id_form = b.id_form AND a.course = b.course AND a.sem_number = b.sem_number " +
+                    "AND a.date_start = b.date_start AND a.date_end = b.date_end AND a.id_profile = b.id_profile AND a.ctid > b.ctid;");
+        } catch (SQLException | IOException e) {
+            e.printStackTrace();
+        } finally {
             statement.close();
             con.close();
         }
