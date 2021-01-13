@@ -254,4 +254,60 @@ public class ConnectDB
             con.close();
         }
     }
+
+    public void addStudents(String fileStudent) {
+        try {
+
+            /*
+            Если временная таблица существует, то удаляем ее
+            Создаем новую временную таблицу
+             */
+            statement.execute("DROP TABLE IF EXISTS temp_student;" +
+                    "CREATE TABLE IF NOT EXISTS temp_student (fio VARCHAR, email VARCHAR, st_book VARCHAR, inst_min VARCHAR, " +
+                    "group_name VARCHAR, group_code INT, course INT, speciality_code VARCHAR, specialty_name VARCHAR, " +
+                    "profile INT, profile_name VARCHAR, status VARCHAR, password VARCHAR, form VARCHAR, inst_max VARCHAR, " +
+                    "number_up VARCHAR, date_up VARCHAR)");
+
+            //Копируем данные во временную таблицу
+            CopyManager cp = new CopyManager((BaseConnection) con);
+            cp.copyIn("COPY temp_student FROM STDIN WITH CSV HEADER DELIMITER ';';", new BufferedReader(new FileReader(fileStudent)));
+
+            //удаление ненужных полей
+            statement.execute("ALTER TABLE temp_student DROP COLUMN group_name, DROP COLUMN speciality_code," +
+                    "DROP COLUMN specialty_name, DROP COLUMN profile_name, DROP COLUMN inst_max, " +
+                    "DROP COLUMN number_up, DROP COLUMN date_up;");
+
+            statement.execute("ALTER TABLE temp_student ADD COLUMN id_spec VARCHAR;" +
+                    "UPDATE temp_student SET id_spec=profile;");
+
+            //Обновление формы обучения
+            statement.execute("UPDATE temp_student SET form='1' WHERE form='Заочная';"+
+                    "UPDATE temp_student SET form='2' WHERE form='Заочная сокращенная';" +
+                    "UPDATE temp_student SET form='3' WHERE form='Заочная ускоренная';" +
+                    "UPDATE temp_student SET form='4' WHERE form='Очная';" +
+                    "UPDATE temp_student SET form='5' WHERE form='Очно-заочная';" +
+                    "UPDATE temp_student SET form='6' WHERE form='Очно-заочная ускоренная';");
+
+            //Обление институтов
+            statement.execute("UPDATE temp_student SET inst_min='5' WHERE inst_min='Аспирантура';" +
+                    "UPDATE temp_student SET inst_min='1' WHERE inst_min='ИГиМ';" +
+                    "UPDATE temp_student SET inst_min='2' WHERE inst_min='ИКиП';" +
+                    "UPDATE temp_student SET inst_min='6' WHERE inst_min='Техникум';" +
+                    "UPDATE temp_student SET inst_min='4' WHERE inst_min='ИОиТИБ';");
+
+            //Обновление статусов
+            statement.execute("UPDATE temp_student SET status='1' WHERE status LIKE 'Учитс%' OR status LIKE 'Отпуск%';" +
+                    "UPDATE temp_student SET status='3' WHERE status LIKE 'Акад%';");
+
+            //Вычищение таблицы студентов и заливка данных
+            statement.execute("DELETE FROM student;");
+            statement.execute("INSERT INTO student(fio, email, pass, st_book, institute, group_st, course, form_tr, " +
+                    "profile, status, id_spec) " +
+                    "SELECT fio, email, password, st_book, inst_min, group_code, course, form, profile, status, id_spec FROM temp_student;");
+
+            statement.execute("DROP TABLE temp_student;");
+        } catch (SQLException | IOException e) {
+            e.printStackTrace();
+        }
+    }
 }
